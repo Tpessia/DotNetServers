@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotNetServers.Http\DotNetServers.Http.csproj" />
+    <ProjectReference Include="..\DotNetServers.Shared\DotNetServers.Shared.csproj" />
+    <ProjectReference Include="..\DotNetServers.Tcp\DotNetServers.Tcp.csproj" />
+    <ProjectReference Include="..\DotNetServers.WebSocket\DotNetServers.WebSocket.csproj" />
+  </ItemGroup>
+
+</Project>

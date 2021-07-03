@@ -1,0 +1,12 @@
+{
+  "name": "clients",
+  "scripts": {
+    "tcp": "node tcp-client.js",
+    "http": "node http-client.js",
+    "ws": "node ws-client.js"
+  },
+  "dependencies": {
+    "axios": "^0.21.1",
+    "ws": "^7.5.1"
+  }
+}
