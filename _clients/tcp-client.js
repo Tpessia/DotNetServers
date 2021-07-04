@@ -69,5 +69,7 @@ function send(msg) {
         client.destroy(); // kill client after server's response
     });
     
+    client.on('error', err => process.stdout.write(prefix + err + sulfix));
+    
     client.on('close', () => process.stdout.write(prefix + 'closed' + sulfix));
 }

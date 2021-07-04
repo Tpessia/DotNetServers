@@ -2,7 +2,7 @@
 using System.Net;
 using System.Threading.Tasks;
 
-namespace DotNetServers.Http
+namespace DotNetServers.Http.HttpListener
 {
     public interface IHttpServer : IDisposable
     {
@@ -13,7 +13,7 @@ namespace DotNetServers.Http
 
         bool IsRunning { get; }
 
-        void Start(IPEndPoint endpoint, Func<HttpRequest, Task<HttpResponse>> respond, TimeSpan? streamTimeout = null);
+        void Start(string endpoint, Func<string, HttpListenerRequest, HttpListenerResponse, Task<string>> respond);
         void Stop();
     }
 

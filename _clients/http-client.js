@@ -11,7 +11,7 @@ console.log('----- INSTRUCTIONS -----');
 console.log('exit: close application');
 console.log('cls: clear console');
 console.log('server {endpoint} {method}: set server\'s endpoint and method');
-console.log('- server http://192.168.0.1:8001 POST');
+console.log('- server http://192.168.0.1:8010 POST');
 console.log('send {text}: send message to server');
 console.log('- send hello world');
 console.log();

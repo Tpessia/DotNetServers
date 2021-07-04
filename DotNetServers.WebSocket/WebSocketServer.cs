@@ -1,5 +1,4 @@
-﻿using DotNetServers.Shared;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -35,18 +34,18 @@ namespace DotNetServers.WebSocket
         private TcpListener _server;
         private CancellationTokenSource _cts = new CancellationTokenSource();
         private readonly List<WebSocketClient> _clients = new List<WebSocketClient>();
-        private TimeSpan _streamTimeout;
+        private TimeSpan _timeout;
 
         public bool IsRunning { get; private set; } = false;
 
         public Action<TcpClient, string> Send => (TcpClient client, string message) => WriteMessage(client, message);
         public Action<string> Broadcast => (string message) => _clients.ForEach(c => WriteMessage(c.Client, message));
 
-        public void Start(IPEndPoint endpoint, TimeSpan? streamTimeout = null)
+        public void Start(IPEndPoint endpoint, TimeSpan? timeout = null)
         {
             _endpoint = endpoint;
             _server = new TcpListener(_endpoint);
-            _streamTimeout = streamTimeout ?? TimeSpan.FromSeconds(10);
+            _timeout = timeout ?? TimeSpan.FromSeconds(10);
 
             try
             {
@@ -146,6 +145,7 @@ namespace DotNetServers.WebSocket
 
                     // Perform a blocking call to accept requests
                     // Can use server.AcceptSocket() or _server.AcceptTcpClient()
+                    // Has sync and async implementations
                     var client = _server.AcceptTcpClient();
 
                     // Process request
@@ -164,12 +164,16 @@ namespace DotNetServers.WebSocket
 
         private void Process(TcpClient client)
         {
-            client.ReceiveTimeout = (int)_streamTimeout.TotalMilliseconds;
-            client.SendTimeout = (int)_streamTimeout.TotalMilliseconds;
+            client.ReceiveTimeout = (int)_timeout.TotalMilliseconds;
+            client.SendTimeout = (int)_timeout.TotalMilliseconds;
 
             try
             {
+                // Get a stream object for reading and writing
                 var netStream = client.GetStream();
+
+                netStream.ReadTimeout = (int)_timeout.TotalMilliseconds;
+                netStream.WriteTimeout = (int)_timeout.TotalMilliseconds;
 
                 while (true)
                 {
@@ -216,7 +220,7 @@ namespace DotNetServers.WebSocket
             while (client.Available < 3) ; // match against "get"
 
             var bytes = new byte[client.Available];
-            netStream.Read(bytes, 0, client.Available);
+            netStream.Read(bytes, 0, client.Available); // buffer vs client.Available
 
             return bytes;
         }
@@ -263,9 +267,13 @@ namespace DotNetServers.WebSocket
 
         private void WriteMessage(TcpClient client, string message, Opcode opcode = Opcode.TextFrame)
         {
-            var stream = client.GetStream();
+            var netStream = client.GetStream();
+
+            netStream.ReadTimeout = (int)_timeout.TotalMilliseconds;
+            netStream.WriteTimeout = (int)_timeout.TotalMilliseconds;
+
             var bytes = EncodeMessageToSend(message, opcode);
-            stream.Write(bytes);
+            netStream.Write(bytes);
         }
 
         private string DecodeMessage(byte[] bytes)

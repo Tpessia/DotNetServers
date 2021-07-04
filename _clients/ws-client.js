@@ -10,7 +10,7 @@ console.log('----- INSTRUCTIONS -----');
 console.log('exit: close application');
 console.log('cls: clear console');
 console.log('server {endpoint}: connect to server');
-console.log('- server ws://192.168.0.1:8002');
+console.log('- server ws://192.168.0.1:8020');
 console.log('send {text}: send message to server');
 console.log('- send hello world');
 console.log();

@@ -1,20 +1,18 @@
-﻿using DotNetServers.Shared;
-using System;
+﻿using System;
+using System.IO;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DotNetServers.Http
+namespace DotNetServers.Http.HttpListener
 {
     public class HttpServer : IHttpServer, IDisposable
     {
-        private IPEndPoint _endPoint;
-        private TcpListener _server;
+        private string _endPoint;
+        private System.Net.HttpListener _server;
         private CancellationTokenSource _cts = new CancellationTokenSource();
-        private Func<HttpRequest, Task<HttpResponse>> _respond;
-        private TimeSpan _streamTimeout;
+        private Func<string, HttpListenerRequest, HttpListenerResponse, Task<string>> _respond;
 
         public bool IsRunning { get; private set; } = false;
 
@@ -23,14 +21,14 @@ namespace DotNetServers.Http
         public event EventHandler<HttpErrorEventArgs> Error;
         public event EventHandler Closed;
 
-        public void Start(IPEndPoint endpoint, Func<HttpRequest, Task<HttpResponse>> respond, TimeSpan? streamTimeout = null)
+        public void Start(string endPoint, Func<string, HttpListenerRequest, HttpListenerResponse, Task<string>> respond)
         {
             if (IsRunning) return;
 
-            _endPoint = endpoint;
-            _server = new TcpListener(_endPoint);
+            _endPoint = endPoint;
+            _server = new System.Net.HttpListener();
+            _server.Prefixes.Add(endPoint);
             _respond = respond;
-            _streamTimeout = streamTimeout ?? TimeSpan.FromSeconds(10);
 
             try
             {
@@ -83,11 +81,11 @@ namespace DotNetServers.Http
                     if (_cts.IsCancellationRequested) break;
 
                     // Perform a blocking call to accept requests
-                    // Can use server.AcceptSocket() or _server.AcceptTcpClient()
-                    var client = _server.AcceptTcpClient();
+                    // Has sync and async implementations
+                    var context = _server.GetContext();
 
                     // Process request
-                    Task.Run(() => Process(client), _cts.Token);
+                    Task.Run(() => Process(context), _cts.Token);
                 }
             }
             catch (Exception ex)
@@ -97,58 +95,44 @@ namespace DotNetServers.Http
             }
         }
 
-        private async Task Process(TcpClient client)
+        private async Task Process(HttpListenerContext httpContext)
         {
-            client.ReceiveTimeout = (int)_streamTimeout.TotalMilliseconds;
-            client.SendTimeout = (int)_streamTimeout.TotalMilliseconds;
-
             try
             {
-                // Buffer for reading data
-                var buffer = new byte[8096];
-                var data = "";
-                var length = 0;
+                HttpListenerRequest httpRequest = httpContext.Request;
+                HttpListenerResponse httpResponse = httpContext.Response;
 
-                // Get a stream object for reading and writing
-                var netStream = client.GetStream();
+                string data;
 
-                // Loop to receive all the data sent by the client
-                do
+                // Read and translate data bytes to a UTF8 string
+                using (var inStream = httpRequest.InputStream)
+                using (var readStream = new StreamReader(inStream, Encoding.UTF8))
                 {
-                    if (_cts.IsCancellationRequested) break;
-
-                    // Read and translate data bytes to a UTF8 string
-                    length = netStream.Read(buffer, 0, buffer.Length);
-                    data += Encoding.UTF8.GetString(buffer, 0, length);
-                } while (netStream.DataAvailable);
+                    data = readStream.ReadToEnd();
+                }
 
                 // Process the data sent by the client
                 Data?.Invoke(this, new HttpDataEventArgs(data));
-                var httpRequest = HttpParser.ParseRequest(data);
-                var response = await _respond(httpRequest);
-                var httpResponse = HttpParser.BuildResponse(response);
+                var response = await _respond(data, httpRequest, httpResponse);
+                var msg = Encoding.UTF8.GetBytes(response);
+
+                httpResponse.ContentType ??= "text/plain";
+                httpResponse.ContentEncoding = Encoding.UTF8;
+                httpResponse.ContentLength64 = msg.LongLength;
 
                 // Send back a response
-                var msg = Encoding.UTF8.GetBytes(httpResponse);
-                netStream.Write(msg);
+                // Has sync and async implementations
+                httpResponse.OutputStream.Write(msg, 0, msg.Length);
 
                 // Shutdown and end connection
-                if (client != null && client.Connected) client.Close();
+                httpResponse.Close();
             }
             catch (Exception ex)
             {
                 Error?.Invoke(this, new HttpErrorEventArgs(ex));
-                client?.Close();
+                httpContext?.Response?.Close();
                 throw;
             }
         }
     }
 }
-
-
-// Async
-//var ctStream = new CancellationTokenSource(_streamTimeout).Token;
-//length = await netStream.ReadAsync(buffer, 0, buffer.Length, ctStream);
-
-// Sync
-//length = netStream.Read(buffer, 0, buffer.Length);

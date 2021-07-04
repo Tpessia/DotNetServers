@@ -1,8 +1,8 @@
-﻿using DotNetServers.Http;
-using DotNetServers.Shared;
+﻿using DotNetServers.Shared;
 using DotNetServers.Tcp;
 using DotNetServers.WebSocket;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -14,10 +14,6 @@ namespace DotNetServers
     {
         static void Main(string[] args)
         {
-            var ipHostInfo = Dns.GetHostEntry(Dns.GetHostName());
-            var ipAddressList = ipHostInfo.AddressList.Where(x => x.AddressFamily == AddressFamily.InterNetwork);
-            var ipAddress = ipAddressList.ElementAt(0); // Choose IP from available interfaces list
-
             // TCP Server
 
             ITcpServer tcpServer = new TcpServer();
@@ -34,31 +30,56 @@ namespace DotNetServers
             tcpServer.Error += (sender, e) => Console.WriteLine("TcpServer Error: " + e.Exception.ToErrorString());
             tcpServer.Closed += (sender, e) => Console.WriteLine("TcpServer Closed!");
 
-            var tcpEndpoint = new IPEndPoint(ipAddress, port: 8000);
-            Console.WriteLine($"Starting TcpServer: tcp://{tcpEndpoint}");
+            var tcpEndpoint = new IPEndPoint(IPAddress.Any, port: 8000);
+            Console.WriteLine($"Starting TcpServer: tcp://{tcpEndpoint}/");
 
             tcpServer.Start(tcpEndpoint, tcpProcess);
 
-            // HTTP Server
+            // HTTP Server (TcpListener)
 
-            IHttpServer httpServer = new HttpServer();
+            Http.TcpListener.IHttpServer httpServer1 = new Http.TcpListener.HttpServer();
 
-            Func<HttpRequest, Task<HttpResponse>> httpProcess = async request =>
+            Func<Http.TcpListener.HttpRequest, Task<Http.TcpListener.HttpResponse>> httpProcess1 = async request =>
             {
                 var rndNumber = await RandomNumberGenerator();
                 var response = $"{rndNumber} - {request.Body}";
-                return new HttpResponse(HttpStatusCode.OK, response);
+                var headers = new Dictionary<string, string> { { "Server", "MyHttpServer/1.0.0" } };
+                return new Http.TcpListener.HttpResponse(HttpStatusCode.OK, response, headers);
             };
 
-            httpServer.Opened += (sender, e) => Console.WriteLine("HttpServer Opened!");
-            httpServer.Data += (sender, e) => Console.WriteLine("HttpServer Data: " + e.Data);
-            httpServer.Error += (sender, e) => Console.WriteLine("HttpServer Error: " + e.Exception.ToErrorString());
-            httpServer.Closed += (sender, e) => Console.WriteLine("HttpServer Closed!");
+            httpServer1.Opened += (sender, e) => Console.WriteLine("HttpServer1 Opened!");
+            httpServer1.Data += (sender, e) => Console.WriteLine("HttpServer1 Data: " + e.Data);
+            httpServer1.Error += (sender, e) => Console.WriteLine("HttpServer1 Error: " + e.Exception.ToErrorString());
+            httpServer1.Closed += (sender, e) => Console.WriteLine("HttpServer1 Closed!");
 
-            var httpEndpoint = new IPEndPoint(ipAddress, port: 8001);
-            Console.WriteLine($"Starting HttpServer: http://{httpEndpoint}");
+            var httpEndpoint1 = new IPEndPoint(IPAddress.Any, port: 8010);
+            Console.WriteLine($"Starting HttpServer1: http://{httpEndpoint1}/");
 
-            httpServer.Start(httpEndpoint, httpProcess);
+            httpServer1.Start(httpEndpoint1, httpProcess1);
+
+            // HTTP Server (HttpListener)
+
+            Http.HttpListener.IHttpServer httpServer2 = new Http.HttpListener.HttpServer();
+
+            Func<string, HttpListenerRequest, HttpListenerResponse, Task<string>> httpProcess2 = async (data, req, res) =>
+            {
+                var rndNumber = await RandomNumberGenerator();
+                var response = $"{rndNumber} - {data}";
+                res.StatusCode = (int)HttpStatusCode.OK;
+                res.Headers.Add("Server", "MyHttpServer/1.0.0");
+                return response;
+            };
+
+            httpServer2.Opened += (sender, e) => Console.WriteLine("HttpServer2 Opened!");
+            httpServer2.Data += (sender, e) => Console.WriteLine("HttpServer2 Data: " + e.Data);
+            httpServer2.Error += (sender, e) => Console.WriteLine("HttpServer2 Error: " + e.Exception.ToErrorString());
+            httpServer2.Closed += (sender, e) => Console.WriteLine("HttpServer2 Closed!");
+
+            //var httpEndpoint2 = "http://*:8011/"; // Requires Admin
+            var httpEndpoint2 = "http://localhost:8011/";
+            Console.WriteLine($"Starting HttpServer2: {httpEndpoint2}");
+
+            httpServer2.Start(httpEndpoint2, httpProcess2);
 
             // WebSocket Server
 
@@ -76,8 +97,8 @@ namespace DotNetServers
             wsServer.Error += (sender, e) => Console.WriteLine(e.Client == null ? "WebSocketServer Error: " + e.Exception.ToErrorString() : "WebSocketServer Client Error: " + e.Exception.ToErrorString());
             wsServer.Closed += (sender, e) => Console.WriteLine(e.Client == null ? "WebSocketServer Closed!" : "WebSocketServer Client Disconnected: " + e.Client.Client.RemoteEndPoint.ToString());
 
-            var wsEndpoint = new IPEndPoint(ipAddress, port: 8002);
-            Console.WriteLine($"Starting WebSocketServer: ws://{wsEndpoint}");
+            var wsEndpoint = new IPEndPoint(IPAddress.Any, port: 8020);
+            Console.WriteLine($"Starting WebSocketServer: ws://{wsEndpoint}/");
 
             wsServer.Start(wsEndpoint);
 
@@ -87,7 +108,8 @@ namespace DotNetServers
             Console.ReadKey();
 
             tcpServer.Stop();
-            httpServer.Stop();
+            httpServer1.Stop();
+            httpServer2.Stop();
             wsServer.Stop();
         }
 

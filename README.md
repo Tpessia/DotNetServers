@@ -1,2 +1,6 @@
 # DotNetServers
-A compilation of .NET based servers implementations
+A compilation of .NET server implementations
+* TCP Server
+* HTTP Server (TcpListener)
+* HTTP Server (HttpListener)
+* WebSocket Server

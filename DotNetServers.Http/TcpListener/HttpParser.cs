@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 
-namespace DotNetServers.Http
+namespace DotNetServers.Http.TcpListener
 {
     public static class HttpParser
     {
@@ -82,11 +82,10 @@ namespace DotNetServers.Http
 
     public class HttpResponse
     {
-        public HttpResponse(HttpStatusCode status, string body, string httpVersion = null, Dictionary<string, string> headers = null)
+        public HttpResponse(HttpStatusCode status, string body, Dictionary<string, string> headers = null)
         {
             Status = status;
             if (body != null) Body = body;
-            if (!string.IsNullOrWhiteSpace(httpVersion)) HttpVersion = httpVersion;
             if (headers != null) Headers = headers;
         }
 

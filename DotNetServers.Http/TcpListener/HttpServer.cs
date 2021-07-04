@@ -5,31 +5,31 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DotNetServers.Tcp
+namespace DotNetServers.Http.TcpListener
 {
-    public class TcpServer : ITcpServer, IDisposable
+    public class HttpServer : IHttpServer, IDisposable
     {
         private IPEndPoint _endPoint;
-        private TcpListener _server;
+        private System.Net.Sockets.TcpListener _server;
         private CancellationTokenSource _cts = new CancellationTokenSource();
-        private Func<string, Task<string>> _respond;
-        private TimeSpan _timeout;
+        private Func<HttpRequest, Task<HttpResponse>> _respond;
+        private TimeSpan timeout;
 
         public bool IsRunning { get; private set; } = false;
 
         public event EventHandler Opened;
-        public event EventHandler<TcpDataEventArgs> Data;
-        public event EventHandler<TcpErrorEventArgs> Error;
+        public event EventHandler<HttpDataEventArgs> Data;
+        public event EventHandler<HttpErrorEventArgs> Error;
         public event EventHandler Closed;
 
-        public void Start(IPEndPoint endpoint, Func<string, Task<string>> respond, TimeSpan? timeout = null)
+        public void Start(IPEndPoint endpoint, Func<HttpRequest, Task<HttpResponse>> respond, TimeSpan? timeout = null)
         {
             if (IsRunning) return;
 
             _endPoint = endpoint;
-            _server = new TcpListener(_endPoint);
+            _server = new System.Net.Sockets.TcpListener(_endPoint);
             _respond = respond;
-            _timeout = timeout ?? TimeSpan.FromSeconds(10);
+            this.timeout = timeout ?? TimeSpan.FromSeconds(10);
 
             try
             {
@@ -38,7 +38,7 @@ namespace DotNetServers.Tcp
             }
             catch (Exception ex)
             {
-                Error?.Invoke(this, new TcpErrorEventArgs(ex));
+                Error?.Invoke(this, new HttpErrorEventArgs(ex));
                 throw;
             }
         }
@@ -58,7 +58,7 @@ namespace DotNetServers.Tcp
             }
             catch (Exception ex)
             {
-                Error?.Invoke(this, new TcpErrorEventArgs(ex));
+                Error?.Invoke(this, new HttpErrorEventArgs(ex));
                 throw;
             }
         }
@@ -92,15 +92,15 @@ namespace DotNetServers.Tcp
             }
             catch (Exception ex)
             {
-                Error?.Invoke(this, new TcpErrorEventArgs(ex));
+                Error?.Invoke(this, new HttpErrorEventArgs(ex));
                 throw;
             }
         }
 
         private async Task Process(TcpClient client)
         {
-            client.ReceiveTimeout = (int)_timeout.TotalMilliseconds;
-            client.SendTimeout = (int)_timeout.TotalMilliseconds;
+            client.ReceiveTimeout = (int)timeout.TotalMilliseconds;
+            client.SendTimeout = (int)timeout.TotalMilliseconds;
 
             try
             {
@@ -112,14 +112,14 @@ namespace DotNetServers.Tcp
                 // Get a stream object for reading and writing
                 var netStream = client.GetStream();
 
-                netStream.ReadTimeout = (int)_timeout.TotalMilliseconds;
-                netStream.WriteTimeout = (int)_timeout.TotalMilliseconds;
+                netStream.ReadTimeout = (int)timeout.TotalMilliseconds;
+                netStream.WriteTimeout = (int)timeout.TotalMilliseconds;
 
                 // Loop to receive all the data sent by the client
                 do
                 {
                     if (_cts.IsCancellationRequested) break;
-
+                    
                     // Perform a blocking call to read available bytes
                     // Has sync and async implementations
                     length = netStream.Read(buffer, 0, buffer.Length); // buffer vs client.Available
@@ -129,9 +129,11 @@ namespace DotNetServers.Tcp
                 } while (netStream.DataAvailable);
 
                 // Process the data sent by the client
-                Data?.Invoke(this, new TcpDataEventArgs(data));
-                var response = await _respond(data);
-                var msg = Encoding.UTF8.GetBytes(response);
+                Data?.Invoke(this, new HttpDataEventArgs(data));
+                var httpRequest = HttpParser.ParseRequest(data);
+                var response = await _respond(httpRequest);
+                var httpResponse = HttpParser.BuildResponse(response);
+                var msg = Encoding.UTF8.GetBytes(httpResponse);
 
                 // Send back a response
                 // Has sync and async implementations
@@ -142,7 +144,7 @@ namespace DotNetServers.Tcp
             }
             catch (Exception ex)
             {
-                Error?.Invoke(this, new TcpErrorEventArgs(ex));
+                Error?.Invoke(this, new HttpErrorEventArgs(ex));
                 client?.Close();
                 throw;
             }
